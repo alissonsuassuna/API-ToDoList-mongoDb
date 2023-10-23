@@ -1,6 +1,7 @@
 const express = require('express');
 //const bodyParser = require('body-parser');
 const mongoose = require('mongoose')
+const objectId = mongoose.Types.ObjectId;
 
 
 const app = express();
@@ -32,19 +33,12 @@ const item3 = new Item({
 
 const defaultItems = [item1, item2, item3]
 
-/*
-async function insertItems() {
-   try {
-      const result = await Item.insertMany(defaultItems)
-      console.log(result, 'inserido com sucesso')
-   } catch (error) {
-      console.error('Ocorreu um erro:', err)
-   } finally {
-      mongoose.connection.close();
-   }
-} */
+const listSchema = {
+   name: String,
+   items: [itemsSchema]
+}
 
-//insertItems()
+const List = mongoose.model('List', listSchema)
 
 app.get('/', async (req, res) => {
 
@@ -64,31 +58,75 @@ app.get('/', async (req, res) => {
     }
 });
 
-app.post('/', (req, res) => {
+app.get('/:customListName', async (req, res) => {
+   const customListName = req.params.customListName
+
+   try {
+      const resultList = await List.findOne({ name: customListName }).exec();
+      if(!resultList) {
+         console.log('Não Tem')
+         const list = new List({
+            name: customListName,
+            items: defaultItems
+         })
+         list.save()
+         res.redirect('/' + customListName)
+      } else {
+         res.render('list', {listTitle: resultList.name, newListItems: resultList.items})
+      }
+   } catch (err) {
+      console.log('deu errado', err)
+   }
+
+})
+
+app.post('/', async (req, res) => {
    const itemName = req.body.newItem
+   const listName = req.body.list
+
+
    const item = new Item({
       name: itemName
    })
-   item.save()
-   res.redirect('/')
+
+   if(listName === "Today") {
+
+      item.save()
+      res.redirect('/')
+   } else {
+      try{
+         const resultListName = await List.findOne({ name: listName }).exec();
+         resultListName.items.push(item)
+         resultListName.save()
+         res.redirect('/' + listName)
+      } catch(erro) {
+         console.log('não deu certo', erro)
+      }
+   }
+
 })
 
 app.post('/delete', async (req, res) => {
 
-   try {
-      const checkedItemId = req.body.checkbox
-      const removeItem = await Item.findByIdAndRemove(checkedItemId)
-      
-      if(!removeItem) {
-         console.log(removeItem, 'Item não encontrado')
-      } else {
-         console.log('Item removido com sucesso', removeItem)
-      }
-      res.redirect('/')
-   } catch (err) {
-      console.error('Ocorreu um erro', err)
-   }
+   const checkedItemId = req.body.checkbox
+   const listName = req.body.listName 
 
+   if(listName === 'Today') {
+      
+      try {
+         const removeItem = await Item.findByIdAndRemove(checkedItemId)  
+         res.redirect('/')
+      } catch (erro) {
+      
+      }
+   } else {
+      try {//findOneAndDelete- esse deu certo
+         const removeListName = await List.findOneAndUpdate({ name: listName }, {$pull: {items: {_id: checkedItemId} }});
+         res.redirect('/' + listName)
+      } catch(error) {
+         console.error('Deu erro', error)
+      }   
+   }
 })
 
 app.get('/trabalho', (req, res) => {
